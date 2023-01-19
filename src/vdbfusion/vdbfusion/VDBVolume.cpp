@@ -27,6 +27,7 @@
 #include <openvdb/math/DDA.h>
 #include <openvdb/math/Ray.h>
 #include <openvdb/openvdb.h>
+#include <openvdb/tools/Interpolation.h>
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -167,4 +168,48 @@ openvdb::FloatGrid::Ptr VDBVolume::Prune(float min_weight) const {
     });
     return clean_tsdf;
 }
+
+void VDBVolume::CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1, 
+                                 openvdb::FloatGrid::Ptr grid_2) {
+                                    // changegrid.Compare(etc...)
+    for (auto iter2 = grid_2->cbeginValueOn(); iter2.test(); ++iter2) {
+      for (auto iter = grid_1->cbeginValueOn(); iter.test(); ++iter) {
+
+          const auto& voxel1 = iter.getCoord();
+          const auto& voxel2 = iter2.getCoord();
+          if (voxel1 == voxel2) {
+            const auto& sdf2 = iter2.getValue();
+            const auto& sdf1 = iter.getValue();
+            const auto& sdfchange = sdf1 - sdf2;
+            this->UpdateTSDF(sdfchange, voxel1, 0); //weighting function set as zero for now
+          }
+      }
+    }
+}
+
+const float VDBVolume::Accessor(const GridType sourceGrid,
+                         const GridType targetGrid,
+                         openvdb::Coord ijk) {
+
+  // Instantiate the DualGridSampler template on the grid type and on
+  // a box sampler for thread-safe but uncached trilinear interpolation.
+  openvdb::tools::DualGridSampler<GridType, openvdb::tools::BoxSampler>
+      sampler(sourceGrid, targetGrid.constTransform());
+  // Compute the value of the source grid at a location in the
+  // target grid's index space.
+  GridType::ValueType value = sampler(ijk);
+  // Request a value accessor for accelerated access to the source grid.
+  // (Because value accessors employ a cache, it is important to declare
+  // one accessor per thread.)
+  GridType::ConstAccessor accessor = sourceGrid.getConstAccessor();
+  // Instantiate the DualGridSampler template on the accessor type and on
+  // a box sampler for accelerated trilinear interpolation.
+  openvdb::tools::DualGridSampler<GridType::ConstAccessor, openvdb::tools::BoxSampler>
+      fastSampler(accessor, sourceGrid.constTransform(), targetGrid.constTransform());
+  // Compute the value of the source grid at a location in the
+  // target grid's index space.
+  tsdf = fastSampler(ijk);
+  return tsdf;
+}
+
 }  // namespace vdbfusion

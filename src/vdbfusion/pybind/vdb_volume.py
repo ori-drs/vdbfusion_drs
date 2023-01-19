@@ -139,6 +139,15 @@ class VDBVolume:
             return self._volume._update_tsdf(sdf, ijk, weighting_function)
         return self._volume._update_tsdf(sdf, ijk)
 
+    def compare_tsdf_grids(
+        self,
+        grid_1,
+        grid_2,
+        weighting_function_1: Optional[Callable[[float], float]] = None
+    ) -> None:
+        ...
+
+
     def extract_triangle_mesh(self, fill_holes: bool = True, min_weight: float = 0.0) -> Tuple:
         """Returns a the vertices and triangles representing the constructed the TriangleMesh.
 

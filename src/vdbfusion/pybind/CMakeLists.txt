@@ -36,3 +36,8 @@ if(PYOPENVDB_SUPPORT)
   target_link_libraries(vdbfusion_pybind PRIVATE Boost::python)
   message(STATUS "PYOPENVDB_SUPPORT enabled")
 endif()
+
+
+
+install(TARGETS vdbfusion_pybind
+        DESTINATION ${CMAKE_CURRENT_LIST_DIR})

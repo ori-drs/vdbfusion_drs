@@ -61,6 +61,10 @@ public:
     void UpdateTSDF(const float& sdf,
                     const openvdb::Coord& voxel,
                     const std::function<float(float)>& weighting_function);
+    
+    /// @brief Compare two TSDF Grids and update change grid with differences. Refrence grid == grid 1.
+    void CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1, 
+                          openvdb::FloatGrid::Ptr grid_2);
 
     /// @brief Prune TSDF grids, ideal utility to cleanup a D(x) volume before exporting it
     openvdb::FloatGrid::Ptr Prune(float min_weight) const;

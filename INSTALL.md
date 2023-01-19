@@ -18,9 +18,11 @@ conda activate vdbfusion
 Install dependencies.
 
 ```sh
-mamba install cmake llvm ccache ninja pkg-config blosc boost eigen tbb tbb-devel pytest numpy black pybind11 twine 
+mamba install cmake llvm ccache ninja pkg-config blosc boost eigen tbb tbb-devel pytest numpy black pybind11 twine Pillow argh
 ```
-
+```
+mamba install open3d-admin open3d 
+```
 Clone the repository and enter it.
 
 ```sh
@@ -44,6 +46,24 @@ git clone --depth 1 https://github.com/nachovizzo/openvdb.git -b nacho/vdbfusion
     && cd ../.. \
     && rm -rf /openvdb
 ```
+```
+cmake -DOPENVDB_BUILD_PYTHON_MODULE=ON -DUSE_NUMPY=ON -DPYOPENVDB_INSTALL_DIRECTORY="/usr/local/lib/python3.8/dist-packages" -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DUSE_ZLIB=OFF ..
+```
+Ensure cmake var tbb lib is set to mambaforcge version.
+
+Add these lines to pybind CMakeLists if not there already:
+```
+
+install(TARGETS vdbfusion_pybind
+        DESTINATION ${CMAKE_CURRENT_LIST_DIR})
+```
+And add Python path to ~/.bashrc, e.g.
+```
+PYTHONPATH=$PYTHONPATH:/home/joe/git/vdbfusion/src
+```
+Tbb_INCLUDE_DIR                  /home/joe/mambaforge/envs/vdbfusion/include
+tbbb legacy lib /home/joe/mambaforge/envs/vdbfusion/include
+
 
 From the root of the repository, build the C++ API and install it into user space.
 ```sh

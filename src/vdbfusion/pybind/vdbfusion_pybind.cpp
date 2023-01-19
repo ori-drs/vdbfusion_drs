@@ -138,6 +138,15 @@ PYBIND11_MODULE(vdbfusion_pybind, m) {
                                 [](float /*sdf*/) { return 1.0f; });
             },
             "sdf"_a, "ijk"_a)
+
+        .def(
+            "_compare_tsdf_grids",
+            [](VDBVolume& self, openvdb::FloatGrid::Ptr grid_1, 
+                                openvdb::FloatGrid::Ptr grid_2) {
+                self.CompareTSDFGrids(grid_1, grid_2);
+            },
+            "grid_1"_a, "grid_2"_a)
+
         .def("_extract_triangle_mesh", &VDBVolume::ExtractTriangleMesh, "fill_holes"_a,
              "min_weight"_a)
         .def(
@@ -146,6 +155,7 @@ PYBIND11_MODULE(vdbfusion_pybind, m) {
                 openvdb::io::File(filename).write({self.tsdf_, self.weights_});
             },
             "filename"_a)
+        
 #ifndef PYOPENVDB_SUPPORT
         .def_property_readonly_static("PYOPENVDB_SUPPORT_ENABLED", [](py::object) { return false; })
 #else
