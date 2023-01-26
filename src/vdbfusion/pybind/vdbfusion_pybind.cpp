@@ -139,16 +139,32 @@ PYBIND11_MODULE(vdbfusion_pybind, m) {
             },
             "sdf"_a, "ijk"_a)
 
+        // .def(
+        //     "_get_tsdf_values",
+        //     [](VDBVolume& self, openvdb::FloatGrid::Ptr grid) {
+        //         self.GetTSDFValues(grid);
+        //     },
+        //     "grid"_a)
+
         .def(
             "_compare_tsdf_grids",
-            [](VDBVolume& self, openvdb::FloatGrid::Ptr grid_1, 
-                                openvdb::FloatGrid::Ptr grid_2) {
-                self.CompareTSDFGrids(grid_1, grid_2);
+            [](VDBVolume& self, openvdb::FloatGrid::Ptr grid_1, openvdb::FloatGrid::Ptr grid_2,
+               openvdb::FloatGrid::Ptr change_grid) {
+                self.CompareTSDFGrids(grid_1, grid_2, change_grid);
+                py::print("hello world");
             },
-            "grid_1"_a, "grid_2"_a)
+            "grid_1"_a, "grid_2"_a, "change_grid"_a)
+
+        .def(
+            "_compositing_grids",
+            [](VDBVolume& self, openvdb::FloatGrid::Ptr gridA, openvdb::FloatGrid::Ptr gridB) {
+                self.CompositingGrids(gridA, gridB);
+            },
+            "gridA"_a, "gridB"_a)
 
         .def("_extract_triangle_mesh", &VDBVolume::ExtractTriangleMesh, "fill_holes"_a,
              "min_weight"_a)
+
         .def(
             "_extract_vdb_grids",
             [](const VDBVolume& self, const std::string& filename) {

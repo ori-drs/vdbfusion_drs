@@ -138,14 +138,28 @@ class VDBVolume:
         if weighting_function is not None:
             return self._volume._update_tsdf(sdf, ijk, weighting_function)
         return self._volume._update_tsdf(sdf, ijk)
+    
+    # def get_tsdf_values(
+    #     self,
+    #     grid
+    # ) -> None:
+    #     ...
 
     def compare_tsdf_grids(
         self,
         grid_1,
         grid_2,
+        change_grid,
         weighting_function_1: Optional[Callable[[float], float]] = None
     ) -> None:
-        ...
+        self._volume._compare_tsdf_grids(grid_1, grid_2, change_grid, weighting_function_1)
+
+    def compositing_grids(
+        self,
+        gridA,
+        gridB
+    )-> None:
+        self._volume._compositing_grids(gridA, gridB)
 
 
     def extract_triangle_mesh(self, fill_holes: bool = True, min_weight: float = 0.0) -> Tuple:

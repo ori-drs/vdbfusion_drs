@@ -61,10 +61,51 @@ public:
     void UpdateTSDF(const float& sdf,
                     const openvdb::Coord& voxel,
                     const std::function<float(float)>& weighting_function);
-    
+
+
+    // /// @brief 
+    // auto GetTSDFValues(openvdb::FloatGrid::Ptr grid);
+
+    /// @brief 
+    /// @param sourceGrid 
+    /// @param targetGrid 
+    /// @param coord 
+    void DualGridSampler(openvdb::FloatGrid::Ptr sourceGrid,
+                     openvdb::FloatGrid::Ptr targetGrid,
+                     openvdb::Coord coord);
+
     /// @brief Compare two TSDF Grids and update change grid with differences. Refrence grid == grid 1.
-    void CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1, 
-                          openvdb::FloatGrid::Ptr grid_2);
+    std::string CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1, 
+                          openvdb::FloatGrid::Ptr grid_2,
+                          openvdb::FloatGrid::Ptr change_grid);
+
+    /// @brief 
+    /// @param sourceGrid 
+    /// @param targetGrid
+    /// @param prune 
+    void TransformGrids(openvdb::FloatGrid::Ptr sourceGrid,
+                        openvdb::FloatGrid::Ptr targetGrid,
+                        bool prune);
+
+    /// @brief uses tools::foreach to multiply all values (both tile and voxel and both active and inactive) 
+    /// of a scalar, floating-point grid by value
+    /// @param grid 
+    /// @param value 
+    void GridValueTransformation(openvdb::FloatGrid::Ptr grid,
+                            float value);
+
+    /// @brief 
+    /// @param gridA 
+    /// @param gridB 
+    void CombineGrids(openvdb::FloatGrid::Ptr gridA,
+                  openvdb::FloatGrid::Ptr gridB);
+
+    /// @brief compositing functions in tools/Composite.h operate on pairs of grids of 
+    ///the same type, and they always leave the second grid empty.
+    /// @param gridA 
+    /// @param gridB 
+    void CompositingGrids(openvdb::FloatGrid::Ptr gridA,
+                      openvdb::FloatGrid::Ptr gridB);
 
     /// @brief Prune TSDF grids, ideal utility to cleanup a D(x) volume before exporting it
     openvdb::FloatGrid::Ptr Prune(float min_weight) const;

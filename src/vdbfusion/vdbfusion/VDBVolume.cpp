@@ -28,6 +28,8 @@
 #include <openvdb/math/Ray.h>
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/Interpolation.h>
+#include <openvdb/tools/GridTransformer.h>
+#include <openvdb/tools/Composite.h>
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -55,6 +57,8 @@ Eigen::Vector3d GetVoxelCenter(const openvdb::Coord& voxel, const openvdb::math:
     openvdb::math::Vec3d v_wf = xform.indexToWorld(voxel) + voxel_size / 2.0;
     return Eigen::Vector3d(v_wf.x(), v_wf.y(), v_wf.z());
 }
+
+
 
 }  // namespace
 
@@ -169,22 +173,158 @@ openvdb::FloatGrid::Ptr VDBVolume::Prune(float min_weight) const {
     return clean_tsdf;
 }
 
-void VDBVolume::CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1, 
-                                 openvdb::FloatGrid::Ptr grid_2) {
-                                    // changegrid.Compare(etc...)
-    for (auto iter2 = grid_2->cbeginValueOn(); iter2.test(); ++iter2) {
-      for (auto iter = grid_1->cbeginValueOn(); iter.test(); ++iter) {
 
-          const auto& voxel1 = iter.getCoord();
-          const auto& voxel2 = iter2.getCoord();
-          if (voxel1 == voxel2) {
-            const auto& sdf2 = iter2.getValue();
-            const auto& sdf1 = iter.getValue();
-            const auto& sdfchange = sdf1 - sdf2;
-            this->UpdateTSDF(sdfchange, voxel1, 0); //weighting function set as zero for now
-          }
-      }
+void VDBVolume::DualGridSampler(openvdb::FloatGrid::Ptr sourceGrid,
+                     openvdb::FloatGrid::Ptr targetGrid,
+                     openvdb::Coord coord){
+
+//   // Instantiate the DualGridSampler template on the grid type and on
+//   // a box sampler for thread-safe but uncached trilinear interpolation.
+//   openvdb::tools::DualGridSampler<openvdb::FloatGrid::Ptr, openvdb::tools::BoxSampler>
+//       sampler(sourceGrid, targetGrid.constTransform());
+//   // Compute the value of the source grid at a location in the
+//   // target grid's index space.
+//   openvdb::FloatGrid::Ptr::ValueType value = sampler(openvdb::Coord(-23, -50, 202));
+//   // Request a value accessor for accelerated access to the source grid.
+//   // (Because value accessors employ a cache, it is important to declare
+//   // one accessor per thread.)
+//   openvdb::FloatGrid::Ptr::ConstAccessor accessor = sourceGrid.getConstAccessor();
+//   // Instantiate the DualGridSampler template on the accessor type and on
+//   // a box sampler for accelerated trilinear interpolation.
+//   openvdb::tools::DualGridSampler<GridType::ConstAccessor, openvdb::tools::BoxSampler>
+//       fastSampler(accessor, sourceGrid.constTransform(), targetGrid.constTransform());
+//   // Compute the value of the source grid at a location in the
+//   // target grid's index space.
+//   value = fastSampler(openvdb::Coord(-23, -50, 202));
+
+
+
+}
+
+
+std::string VDBVolume::CompareTSDFGrids(openvdb::FloatGrid::Ptr grid_1,
+                                 openvdb::FloatGrid::Ptr grid_2,
+                                 openvdb::FloatGrid::Ptr change_grid) {
+                                    // changegrid.Compare(etc...)
+    // Transform grids 
+    //this->TransformGrids(grid_1, grid_2);
+
+    // Get the "unsafe" version of the grid acessors
+    auto tsdf_acc = tsdf_->getUnsafeAccessor();
+    auto weights_acc = weights_->getUnsafeAccessor();
+    
+    // Get an accessor for coordinate-based access to voxels.
+    openvdb::FloatGrid::Accessor accessor = grid_2->getAccessor();
+    openvdb::FloatGrid::Accessor change_grid_accessor = change_grid->getAccessor();
+    std::string message;
+    for (auto iter = grid_1->cbeginValueOn(); iter.test(); ++iter) {
+      const auto& voxel1 = iter.getCoord();
+      const auto& sdf2 = accessor.getValue(voxel1);
+      const auto& sdf1 = iter.getValue();
+      const float last_tsdf = tsdf_acc.getValue(voxel1);
+      const auto& sdfchange = sdf1 - sdf2 - last_tsdf;
+      change_grid_accessor.setValue(voxel1, sdfchange);
+      this->UpdateTSDF(sdfchange, voxel1, 0); //weighting function set as zero for now
+      message += (" \nVoxel values: " + std::to_string(sdf1) + std::to_string(sdf1) ); 
+       
     }
+    return message; 
+}
+
+void VDBVolume::TransformGrids(openvdb::FloatGrid::Ptr sourceGrid,
+                               openvdb::FloatGrid::Ptr targetGrid,
+                               bool prune = false) {
+
+    // Get the source and target grids' index space to world space transforms.
+    const openvdb::math::Transform
+        &sourceXform = sourceGrid->transform(),
+        &targetXform = targetGrid->transform();
+    // Compute a source grid to target grid transform.
+    // (For this example, we assume that both grids' transforms are linear,
+    // so that they can be represented as 4 x 4 matrices.)
+    openvdb::Mat4R xform =
+        sourceXform.baseMap()->getAffineMap()->getMat4() *
+        targetXform.baseMap()->getAffineMap()->getMat4().inverse();
+    // Create the transformer.
+    openvdb::tools::GridTransformer transformer(xform);
+    // Resample using nearest-neighbor interpolation.
+    transformer.transformGrid<openvdb::tools::PointSampler, openvdb::FloatGrid>(
+          *sourceGrid, *targetGrid);
+    // Resample using trilinear interpolation.
+    transformer.transformGrid<openvdb::tools::BoxSampler, openvdb::FloatGrid>(
+          *sourceGrid, *targetGrid);
+    // Resample using triquadratic interpolation.
+    transformer.transformGrid<openvdb::tools::QuadraticSampler, openvdb::FloatGrid>(
+          *sourceGrid, *targetGrid);
+    if (prune) {
+        // Prune the target tree for optimal sparsity.
+        targetGrid->tree().prune();
+    }
+}
+
+void VDBVolume::GridValueTransformation(openvdb::FloatGrid::Ptr grid,
+                            float value){
+    // Define a local function that doubles the value to which the given
+    // value iterator points.
+    struct Local {
+        static inline void op(const openvdb::FloatGrid::ValueAllIter& iter) {
+            iter.setValue(*iter * 2); //value
+        }
+    };
+    // Apply the function to all values.
+    openvdb::tools::foreach(grid->beginValueAll(), Local::op);
+}
+
+void VDBVolume::CombineGrids(openvdb::FloatGrid::Ptr gridA,
+                  openvdb::FloatGrid::Ptr gridB){
+    // Two grids of the same type containing level set volumes
+
+    // Save copies of the two grids; CSG operations always modify
+    // the A grid and leave the B grid empty.
+    openvdb::FloatGrid::ConstPtr
+        copyOfGridA = gridA->deepCopy(),
+        copyOfGridB = gridB->deepCopy();
+    // Compute the union (A u B) of the two level sets.
+    openvdb::tools::csgUnion(*gridA, *gridB);
+    // Restore the original level sets.
+    gridA = copyOfGridA->deepCopy();
+    gridB = copyOfGridB->deepCopy();
+    // Compute the intersection (A n B) of the two level sets.
+    openvdb::tools::csgIntersection(*gridA, *gridB);
+    // Restore the original level sets.
+    gridA = copyOfGridA->deepCopy();
+    gridB = copyOfGridB->deepCopy();
+    // Compute the difference (A / B) of the two level sets.
+    openvdb::tools::csgDifference(*gridA, *gridB);
+
+}
+
+void VDBVolume::CompositingGrids(openvdb::FloatGrid::Ptr gridA,
+                                                    openvdb::FloatGrid::Ptr gridB){
+    // Save copies of the two grids; compositing operations always
+    // modify the A grid and leave the B grid empty.
+    openvdb::FloatGrid::ConstPtr
+        copyOfGridA = gridA->deepCopy(),
+        copyOfGridB = gridB->deepCopy();
+    // At each voxel, compute a = max(a, b).
+    // openvdb::tools::compMax(*gridA, *gridB);
+    // // Restore the original grids.
+    // gridA = copyOfGridA->deepCopy();
+    // gridB = copyOfGridB->deepCopy();
+    // // At each voxel, compute a = min(a, b).
+    // openvdb::tools::compMin(*gridA, *gridB);
+    // // Restore the original grids.
+    // gridA = copyOfGridA->deepCopy();
+    // gridB = copyOfGridB->deepCopy();
+    // At each voxel, compute a = a + b.
+    // openvdb::tools::compSum(*gridA, *gridB);
+    openvdb::tools::csgDifference(*gridA, *gridB);
+    // Restore the original grids.
+    // gridA = copyOfGridA->deepCopy();
+    // gridB = copyOfGridB->deepCopy();
+    // // At each voxel, compute a = a * b.
+    // openvdb::tools::compMul(*gridA, *gridB);
+    //    return gridA;
 }
 
 // const float VDBVolume::Accessor(const GridType sourceGrid,
